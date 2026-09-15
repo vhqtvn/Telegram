@@ -1,0 +1,36 @@
+# Local changes registry (fork patch map)
+Purpose: durable map of every local commit on top of upstream DrKLO/Telegram, so upstream release bumps are mechanical. Maintained at every release bump and whenever a local commit lands. Backlog (docs/planning/backlog.md) tracks task status; this file tracks the PATCH SURFACE.
+
+## Upstream tracking
+- Upstream base this fork sits on: `62b56a07c` "update to 12.10.1 (7038)" (2026-08-25).
+- Upstream has NO git tags; each release is ONE squashed "update to X.Y.Z (build)" commit; cadence ~2.6/month. Track releases by these commit hashes (`git log upstream/master --grep="update to" --oneline`).
+- Remote name for upstream: `upstream` → https://github.com/DrKLO/Telegram.git (to be added by operator).
+- Sync check 2026-09-15: `git fetch upstream` succeeded (3.4s); `upstream/master` == base `62b56a07c` — 12.10.1 (7038) is the newest upstream release, zero drift, iteration-1 lands conflict-free. Non-fatal fetch warning: submodule `TMessagesProj/jni/libtgvoip` commit `2cf2a45ac` unreachable from our submodule remote (informational only).
+- Note: upstream tags exist historically (5.13.0 → 11.4.2, fetched with the remote) but upstream stopped tagging after 11.4.2 — "update to" commit hashes remain the release tracking mechanism.
+
+## Maintenance rules (binding)
+- R1: Inline surgical patches only for state/correctness fixes in historically stable regions (verify stability via `git log -L` before choosing inline).
+- R2: All GROWING policy logic (breakpoints, pane policy, posture hooks) lives in a fork-owned helper class (planned: `org.telegram.messenger.FoldableConfig`, static, dependency-light, Java, Telegram idiom — introduced at FOLD-002, NOT retrofitted onto iteration 1). Upstream files get one-line call sites; fork-owned file paths cannot conflict with upstream by construction.
+- R3: Rebase-per-release: rebase the local themed commit series onto each new upstream "update to" commit; NEVER squash local commits into the upstream base; keep commits themed with `foldables:` prefix (other themes allowed as they appear); one conceptual change per commit.
+- R4: This registry is updated at every release bump (new base hash) and at every local commit landing.
+- R5: Post-bump verification gate: `./gradlew :TMessagesProj:compileDebugJavaWithJavac` then `./gradlew :TMessagesProj_App:assembleAfatDebug` (env: JAVA_HOME=~jdk/jdk-21*, PATH prepend ~/android-sdk/cmake/3.22.1/bin); fold-matrix smoke when hardware available; `apkdiff.py` is valid ONLY for own-vs-own regression diffing (fork-vs-official byte comparison is impossible once any local change lands — dex differs).
+
+## Release-bump runbook
+1. `git fetch upstream`
+2. Find target: `git log upstream/master --grep="update to" --oneline -5`
+3. `git rebase <new-release-hash>` (resolve conflicts per local commit, guided by the entries below)
+4. Run verification gate (R5)
+5. Update this file: new base hash + any notes from conflict resolution
+6. Operator pushes: `git push origin HEAD --force-with-lease` (rebase rewrites SHAs)
+
+## Registry entries
+| Commit | Theme | Files | Why | Conflict-prone regions / notes |
+|---|---|---|---|---|
+| `724fda54e` | harness (not app code) | `.opencode/`, `.vh-agent-harness/`, `docs/coordination/`, `docs/planning/` seeding, `opencode.jsonc`, `Makefile`, AGENTS/CLAUDE | Repo-resident agent harness | No upstream-code overlap → no conflict surface |
+| `24b04a16e` | foldables iter-1 | `TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java` (+18/−9), `TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java` (+13/−9), `TMessagesProj/src/main/java/org/telegram/ui/LaunchActivity.java` (+25/−0) | Fix state/sizing across runtime size-class flips: D1 roundMessageSize recompute in `resetTabletFlag()`; D2 pause live-view fragments in `invalidateTabletMode()` flip branch (draft persistence); D3 `captureScrollPositionForRecreate()` scroll restore; D4 wasTablet debug alignment | Hunks sit in STABLE sub-regions: `resetTabletFlag` 1 upstream touch ever; roundMessageSize formula unchanged since 2017; theme-preview block ~stable (1 touch 2026); `invalidateTabletMode` MODERATE (2 edits 2026 — watch at bumps). Whole files churn every release (AndroidUtilities ~51%/LaunchActivity ~65%/ChatActivity ~80% of releases) so expect textual context drift, not logic conflicts. |
+| (with the above) | docs | `docs/planning/backlog.md` (+2 rows FOLD-001/FOLD-002) | Task status ledger | No upstream overlap; commit SEPARATELY from code per split-commit rule |
+
+## Known upcoming surface (not yet landed)
+- FOLD-002 (portrait medium-width pane policy) will target `LaunchActivity.setupActionBarLayout()` (gates at ~L943/L966) + `checkLayout()` (~L1320) + `AndroidUtilities.isSmallTablet()/getMinTabletSide()/getTabletLeftFragmentSize()`. `setupActionBarLayout` is CHURNY (3 upstream edits in 12 months) → this is what triggers R2 (central helper), keeping upstream-side edits to one-line call sites.
+
+Registry created 2026-09-15 by the foldables coordination session; see .opencode/state/workstreams/foldable-ux/ for the full maintenance brief.
