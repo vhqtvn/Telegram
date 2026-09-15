@@ -7064,6 +7064,31 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         AndroidUtilities.resetWasTabletFlag();
         if (wasTablet != AndroidUtilities.isTablet()) {
+            // Pause fragments with live views before teardown so in-progress state survives the layout rebuild (ChatActivity saves its draft in onPause).
+            for (BaseFragment fragment : mainFragmentsStack) {
+                if (fragment.fragmentView != null) {
+                    if (fragment instanceof ChatActivity) {
+                        ((ChatActivity) fragment).captureScrollPositionForRecreate();
+                    }
+                    fragment.onPause();
+                }
+            }
+            for (BaseFragment fragment : rightFragmentsStack) {
+                if (fragment.fragmentView != null) {
+                    if (fragment instanceof ChatActivity) {
+                        ((ChatActivity) fragment).captureScrollPositionForRecreate();
+                    }
+                    fragment.onPause();
+                }
+            }
+            for (BaseFragment fragment : layerFragmentsStack) {
+                if (fragment.fragmentView != null) {
+                    if (fragment instanceof ChatActivity) {
+                        ((ChatActivity) fragment).captureScrollPositionForRecreate();
+                    }
+                    fragment.onPause();
+                }
+            }
             long dialogId = 0;
             long topicId = 0;
             if (wasTablet) {

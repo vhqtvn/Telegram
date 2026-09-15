@@ -24030,15 +24030,7 @@ public class ChatActivity extends BaseFragment implements
     private void didReceivedNotification7(int id, int account, final Object... args) {
         if (id == NotificationCenter.goingToPreviewTheme) {
             isPauseOnThemePreview = true;
-            if (chatLayoutManager != null) {
-                scrollToPositionOnRecreate = chatLayoutManager.findFirstVisibleItemPosition();
-                RecyclerListView.Holder holder = (RecyclerListView.Holder) chatListView.findViewHolderForAdapterPosition(scrollToPositionOnRecreate);
-                if (holder != null) {
-                    scrollToOffsetOnRecreate = chatListView.getMeasuredHeight() - holder.itemView.getBottom() - chatListView.getPaddingBottom();
-                } else {
-                    scrollToPositionOnRecreate = -1;
-                }
-            }
+            captureScrollPositionForRecreate();
         } else if (id == NotificationCenter.channelRightsUpdated) {
             TLRPC.Chat chat = (TLRPC.Chat) args[0];
             if (currentChat != null && chat.id == currentChat.id && chatActivityEnterView != null) {
@@ -29959,6 +29951,18 @@ public class ChatActivity extends BaseFragment implements
             }
         } else {
             return threadMessageId;
+        }
+    }
+
+    public void captureScrollPositionForRecreate() {
+        if (chatLayoutManager != null) {
+            scrollToPositionOnRecreate = chatLayoutManager.findFirstVisibleItemPosition();
+            RecyclerListView.Holder holder = (RecyclerListView.Holder) chatListView.findViewHolderForAdapterPosition(scrollToPositionOnRecreate);
+            if (holder != null) {
+                scrollToOffsetOnRecreate = chatListView.getMeasuredHeight() - holder.itemView.getBottom() - chatListView.getPaddingBottom();
+            } else {
+                scrollToPositionOnRecreate = -1;
+            }
         }
     }
 
