@@ -254,6 +254,66 @@ def getProps(String propName) {
         return "";
     }
 }
+
+// fork: when local.properties defines TELEGRAM_API_ID and TELEGRAM_API_HASH, patch them
+// into BuildVars before java compilation and restore the committed placeholders when
+// the build ends, so real credentials never reach the git tree
+def buildVarsFile = project.file('src/main/java/org/telegram/messenger/BuildVars.java')
+def buildVarsIdPlaceholder = 'public static int APP_ID = 4;'
+def buildVarsHashPlaceholder = 'public static String APP_HASH = "014b35b6184100b085b0d0572f9b5103";'
+
+def patchBuildVars = tasks.register('patchBuildVars') {
+    doLast {
+        def apiId = getProps('TELEGRAM_API_ID')
+        def apiHash = getProps('TELEGRAM_API_HASH')
+        if (!apiId || !apiHash) {
+            return
+        }
+        def idLine = "public static int APP_ID = ${apiId.trim()};"
+        def hashLine = "public static String APP_HASH = \"${apiHash.trim()}\";"
+        def text = buildVarsFile.getText('UTF-8')
+        if (text.contains(idLine) && text.contains(hashLine)) {
+            return
+        }
+        if (!text.contains(buildVarsIdPlaceholder) || !text.contains(buildVarsHashPlaceholder)) {
+            throw new GradleException('BuildVars.java is not in the committed placeholder state, refusing to patch it')
+        }
+        buildVarsFile.write(text.replace(buildVarsIdPlaceholder, idLine).replace(buildVarsHashPlaceholder, hashLine), 'UTF-8')
+        logger.lifecycle('patchBuildVars: applied api credentials from local.properties')
+    }
+}
+
+def restoreBuildVarsAction = {
+    def text = buildVarsFile.getText('UTF-8')
+    def restored = text
+            .replaceAll(/public static int APP_ID = \d+;/, java.util.regex.Matcher.quoteReplacement(buildVarsIdPlaceholder))
+            .replaceAll(/public static String APP_HASH = "[0-9a-fA-F]*";/, java.util.regex.Matcher.quoteReplacement(buildVarsHashPlaceholder))
+    if (restored != text) {
+        buildVarsFile.write(restored, 'UTF-8')
+        logger.lifecycle('restoreBuildVars: restored committed BuildVars placeholders')
+    }
+    return null
+}
+
+def restoreBuildVars = tasks.register('restoreBuildVars') {
+    doLast restoreBuildVarsAction
+}
+
+tasks.configureEach { task ->
+    if (task.name.endsWith('JavaWithJavac')) {
+        task.dependsOn patchBuildVars
+    }
+}
+
+// restore when the build ends (not via finalizedBy: graph mutations at taskGraph.whenReady are ignored)
+gradle.buildFinished {
+    try {
+        restoreBuildVarsAction()
+    } catch (Throwable t) {
+        logger.warn("restoreBuildVars: failed: ${t.message}")
+    }
+}
+
 apply plugin: 'com.google.gms.google-services'
 
 task checkVisibility {
