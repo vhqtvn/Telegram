@@ -40,3 +40,6 @@ __pycache__/
 htmlcov/
 .coverage
 coverage.*
+# --- auto-gate never-commit files (vh-agent-harness auto-classifier-pilot) ---
+.opencode/repo-configs/*.local.json
+.opencode/repo-configs/auto-gate-llm.json
