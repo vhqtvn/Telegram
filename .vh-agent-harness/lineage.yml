@@ -1,0 +1,24 @@
+# lineage.yml - S1 render lineage (decision D3-B).
+# Shim-owned and lineage-ONLY. This is NOT policy authority: it cannot answer
+# "which profile?" (S3), "is this file safe to overwrite?" (S2), or "which
+# services run?" (S4). See the config-authority model.
+# Do not hand-edit; the harness rewrites this file on render/update.
+lineage_version: "1"
+template:
+    source: templates/core
+    commit: ""
+    ref: harness/0.26.2
+copier:
+    version: ""
+answers:
+    digest: sha256:ca421051c997045db23df1799fef3554eec7c599dd03a71f661660463afdd592
+    selected_keys:
+        - project_name
+        - project_slug
+    values:
+        project_name: Telegram
+        project_slug: telegram
+render:
+    last_successful_update_id: d7fb365f9cf7d914
+    last_successful_render_at: "2026-09-15T09:50:52Z"
+    rendered_by: embed-fs

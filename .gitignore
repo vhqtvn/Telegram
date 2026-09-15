@@ -14,3 +14,29 @@ TMessagesProj_AppHockeyApp/afat/
 TMessagesProj_AppStandalone/afat/
 TMessagesProj_AppHuawei/afat/
 TMessagesProj/jni/ffmpeg/build_android
+
+# --- vh-agent-harness: agent/harness local state (never commit) ---
+.opencode/state/
+.opencode/sessions/
+.opencode/plans/
+.opencode/runs/
+.opencode/node_modules/
+.opencode/scripts/__pycache__/
+.local/coordinator/
+.local/config/
+.local/ssh/
+.local/demo-server/
+# --- Repo-scoped scratch (agent runs, logs, temp) ---
+tmp/
+*.log
+*.tmp
+*.bak
+# --- Python caches / test artifacts ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.*
