@@ -2791,16 +2791,7 @@ public class AndroidUtilities {
                 }
             }
             if (roundMessageSize == 0) {
-                if (AndroidUtilities.isTablet()) {
-                    roundMessageSize = (int) (getMinTabletSide() * 0.6f);
-                    roundPlayingMessageSize = (int) (getMinTabletSide() - dp(28));
-                    roundSidePlayingMessageSize = (int) (getMinTabletSide() - dp(28 + 64));
-                } else {
-                    roundMessageSize = (int) (Math.min(displaySize.x, displaySize.y) * 0.6f);
-                    roundPlayingMessageSize = (int) (Math.min(displaySize.x, displaySize.y) - dp(28));
-                    roundSidePlayingMessageSize = (int) (Math.min(displaySize.x - dp(64), displaySize.y) - dp(28));
-                }
-                roundMessageInset = dp(2);
+                computeRoundMessageSizes();
             }
             fillStatusBarHeight(context, true);
             if (BuildVars.LOGS_ENABLED) {
@@ -2812,6 +2803,19 @@ public class AndroidUtilities {
         } catch (Exception e) {
             FileLog.e(e);
         }
+    }
+
+    private static void computeRoundMessageSizes() {
+        if (AndroidUtilities.isTablet()) {
+            roundMessageSize = (int) (getMinTabletSide() * 0.6f);
+            roundPlayingMessageSize = (int) (getMinTabletSide() - dp(28));
+            roundSidePlayingMessageSize = (int) (getMinTabletSide() - dp(28 + 64));
+        } else {
+            roundMessageSize = (int) (Math.min(displaySize.x, displaySize.y) * 0.6f);
+            roundPlayingMessageSize = (int) (Math.min(displaySize.x, displaySize.y) - dp(28));
+            roundSidePlayingMessageSize = (int) (Math.min(displaySize.x - dp(64), displaySize.y) - dp(28));
+        }
+        roundMessageInset = dp(2);
     }
 
     public static void setPreferredMaxRefreshRate(Window window) {
@@ -2967,10 +2971,11 @@ public class AndroidUtilities {
 
     public static void resetTabletFlag() {
         if (wasTablet == null) {
-            wasTablet = isTabletInternal();
+            wasTablet = isTabletInternal() && !SharedConfig.forceDisableTabletMode;
         }
         isTablet = null;
         SharedConfig.updateTabletConfig();
+        computeRoundMessageSizes();
     }
 
     public static void resetWasTabletFlag() {
