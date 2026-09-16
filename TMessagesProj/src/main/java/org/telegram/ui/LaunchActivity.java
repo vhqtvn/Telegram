@@ -129,6 +129,7 @@ import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.OpenAttachedMenuBotReceiver;
 import org.telegram.messenger.PushListenerController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.ResumeWatchdog;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SharedPrefsHelper;
@@ -6730,6 +6731,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onPause() {
+        ResumeWatchdog.onPaused();
         super.onPause();
         isResumed = false;
         pipActivityHandler.onPause();
@@ -6968,6 +6970,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onResume() {
+        ResumeWatchdog.onResumed(this);
         super.onResume();
         isResumed = true;
         pipActivityHandler.onResume();
