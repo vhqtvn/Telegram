@@ -7037,7 +7037,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (VoIPFragment.getInstance() != null) {
             VoIPFragment.onResume();
         }
+        if (Build.VERSION.SDK_INT >= 24) {
+            AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
+        }
         invalidateTabletMode();
+        AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
+        checkLayout();
+        FileLog.d("tabletResume isTablet=" + AndroidUtilities.isTablet() + " wasTablet=" + AndroidUtilities.getWasTablet() + " fullSize=" + tabletFullSize + " mw=" + AndroidUtilities.isInMultiwindow + " disp=" + AndroidUtilities.displaySize.x + "x" + AndroidUtilities.displaySize.y + " small=" + AndroidUtilities.isSmallTablet() + " or=" + (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 'L' : 'P') + " rightAttached=" + (rightActionBarLayout != null && rightActionBarLayout.getView().getParent() != null) + " rightVis=" + (rightActionBarLayout != null ? rightActionBarLayout.getView().getVisibility() : -1) + " rightW=" + (rightActionBarLayout != null ? rightActionBarLayout.getView().getWidth() : -1));
         SpoilerEffect2.pause(false);
 
         if (ApplicationLoader.applicationLoaderInstance != null) {
