@@ -6725,6 +6725,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onPause() {
+        MainThreadWatchdog.onPaused();
         super.onPause();
         isResumed = false;
         pipActivityHandler.onPause();
@@ -6961,6 +6962,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onResume() {
         MainThreadWatchdog.ensureStarted();
+        MainThreadWatchdog.onResumed();
         super.onResume();
         isResumed = true;
         pipActivityHandler.onResume();
