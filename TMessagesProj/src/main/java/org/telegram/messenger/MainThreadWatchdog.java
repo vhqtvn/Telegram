@@ -1,7 +1,9 @@
 package org.telegram.messenger;
 
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.SystemClock;
 import android.view.Choreographer;
@@ -9,29 +11,41 @@ import android.view.Choreographer;
 import java.util.Map;
 
 /**
- * Fork-added continuous main-thread liveness monitor: a Samsung OneUI freezer thaw can leave the
- * main thread starved by freezer/vsync/display churn BEFORE any lifecycle message is deliverable,
- * so a resume-armed watchdog is structurally blind to that hang path (the splash is NOT_FOCUSABLE,
- * so the system never raises an ANR there either). A daemon thread posts a front-of-queue canary
- * every CHECK_INTERVAL_MS and, after MISSES_TO_KILL consecutive misses (~15s of true starvation —
- * a healthy main drains a queue-head canary between any messages), captures the main stack and a
- * thread-state census as evidence, then kills the process so Android relaunches the app cleanly.
- * Debug builds are freezer-exempt, which is why debug never hangs — this guard matters for release.
+ * Fork-added continuous main-thread liveness monitor (v4). The story so far, three bugreport
+ * sightings (latest 2026-09-20): after a Samsung OneUI frozen-cached -> unfreeze ->
+ * task-to-front resume, the app draws ONE healthy frame, then the main thread wedges inside
+ * the NEXT vsync dispatch — native stack NativeDisplayEventReceiver::dispatchVsync ->
+ * CheckJNI::CallObjectMethodV -> ConditionVariable::WaitHoldingLocks, i.e. the ART suspend
+ * handshake at JNI re-entry. Main is only intermittently alive in that state, so the v2
+ * front-of-queue canary passes; and the v3 first-frame-after-resume check disarmed itself
+ * after that first healthy frame — both predicates were structurally blind MID-SESSION.
  *
- * Bugreport-verified live hang (2026-09-19): the main thread can be INTERMITTENTLY alive — it keeps
- * draining binder/receiver messages — while vsync dispatch is wedged BEFORE the Java layer, so no
- * Choreographer callback ever runs, the first draw never happens, the black 0-byte
- * SnapshotStartingWindow stays attached and input reports NOT_VISIBLE. The canary above can pass in
- * that state (queue-head runnables still drain), which is why first-frame-after-resume is the robust
- * predicate: onResumed() arms a one-shot Choreographer frame callback (never re-posted — zero
- * steady-state cost), and if no frame has arrived within FIRST_FRAME_TIMEOUT_MS while resumed, the
- * same fire() path captures evidence and kills the process so Android relaunches the app cleanly.
+ * v4 replaces the one-shot first-frame check with CONTINUOUS frame-evidence stall detection:
+ * while resumed and the screen is interactive, the watchdog loop posts a one-shot
+ * Choreographer probe frame callback every FRAME_PROBE_INTERVAL_MS (5000). Every delivered
+ * probe frame — and every onResumed() — refreshes lastFrameEvidenceMs. If no frame evidence
+ * has arrived for FRAME_STALL_TIMEOUT_MS (15000) while resumed and interactive, the app is
+ * mid-session vsync-wedged: fire() first asks ART for a full thread dump via SIGQUIT
+ * self-capture (the wedge lives BETWEEN Java frames, so the native traces are the only
+ * revelation — they land in tombstoned/logcat), then captures the Java main stack and a
+ * thread-state census, then kills the process so Android relaunches the app cleanly.
+ *
+ * The continuous canary below predates v4 and is unchanged: a daemon thread posts a
+ * front-of-queue canary every CHECK_INTERVAL_MS and MISSES_TO_KILL consecutive misses
+ * (~15s of true starvation — a healthy main drains a queue-head canary between any
+ * messages) takes the same fire() path. It covers TOTAL main starvation; the frame-evidence
+ * predicate covers the intermittent-alive vsync wedge. Screen-off/doze suspends both probing
+ * and firing (screenInteractive() defaults true when PowerManager is unavailable); a paused
+ * activity never fires. Steady-state cost when healthy: one Choreographer callback per 5s —
+ * negligible. Debug builds are freezer-exempt, which is why debug never hangs — this guard
+ * matters for release.
  */
 public class MainThreadWatchdog {
 
     private static final long CHECK_INTERVAL_MS = 3000;
     private static final int MISSES_TO_KILL = 5;
-    private static final long FIRST_FRAME_TIMEOUT_MS = 15000;
+    private static final long FRAME_STALL_TIMEOUT_MS = 15000;
+    private static final long FRAME_PROBE_INTERVAL_MS = 5000;
 
     private static final Object lock = new Object();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -42,9 +56,10 @@ public class MainThreadWatchdog {
     private static volatile int ranGen;
 
     private static volatile boolean resumed;
-    private static volatile long frameArmUptimeMs;
-    private static volatile boolean frameSeen;
-    private static volatile long lastFrameUptimeMs;
+    private static volatile long lastFrameEvidenceMs;
+    private static volatile long lastFrameProbePostMs;
+    private static volatile int probeGen;
+    private static volatile PowerManager powerManager;
 
     public static void ensureStarted() {
         synchronized (lock) {
@@ -62,30 +77,24 @@ public class MainThreadWatchdog {
     }
 
     /**
-     * Arms the one-shot first-frame-after-resume check. Called from LaunchActivity.onResume right
-     * after ensureStarted(). The Choreographer registration is posted to the main handler because
-     * Choreographer.getInstance() may only be touched on the main thread (this also stays correct
-     * if a future caller is off-main). The frame callback does NOT re-post itself: one-shot, zero
-     * steady-state cost.
+     * Refreshes the frame-evidence baseline and marks the activity resumed. Called from
+     * LaunchActivity.onResume right after ensureStarted(). The resume moment itself counts as
+     * frame evidence, so a resume that never produces a first frame still fires at
+     * FRAME_STALL_TIMEOUT_MS; every delivered probe frame thereafter keeps re-arming the
+     * window for the whole session. No Choreographer is touched here — first probe is posted
+     * by the watchdog loop within a cycle.
      */
     public static void onResumed() {
-        frameArmUptimeMs = SystemClock.uptimeMillis();
-        frameSeen = false;
+        lastFrameEvidenceMs = SystemClock.uptimeMillis();
         resumed = true;
         if (BuildVars.DEBUG_VERSION) {
-            FileLog.d("MainThreadWatchdog: armed first-frame check, frameArmUptimeMs=" + frameArmUptimeMs);
+            FileLog.d("MainThreadWatchdog: resumed, frame-stall baseline reset lastFrameEvidenceMs=" + lastFrameEvidenceMs);
         }
-        mainHandler.post(() -> Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
-            lastFrameUptimeMs = SystemClock.uptimeMillis();
-            frameSeen = true;
-            if (BuildVars.DEBUG_VERSION) {
-                FileLog.d("MainThreadWatchdog: first frame after resume dt=" + (lastFrameUptimeMs - frameArmUptimeMs) + "ms");
-            }
-        }));
     }
 
     /**
-     * Disarms the first-frame check only; the continuous canary loop keeps running regardless.
+     * Marks the activity paused; the continuous canary loop keeps running regardless. While
+     * paused there is no probing and no frame-stall firing.
      */
     public static void onPaused() {
         resumed = false;
@@ -129,23 +138,65 @@ public class MainThreadWatchdog {
                 missStreak = 0;
             }
             long now = SystemClock.uptimeMillis();
-            if (frameArmUptimeMs != 0 && frameSeen) {
-                // One-shot per resume: disarm until the next onResumed() re-arms. A late frame
-                // callback from a previous arm may set frameSeen after a fresh arm — benign and
-                // conservative-safe, because frameSeen only ever disarms, never arms.
-                frameArmUptimeMs = 0;
-            }
-            if (resumed && frameArmUptimeMs != 0 && !frameSeen && now - frameArmUptimeMs >= FIRST_FRAME_TIMEOUT_MS) {
+            if (resumed && screenInteractive() && (lastFrameProbePostMs == 0 || now - lastFrameProbePostMs >= FRAME_PROBE_INTERVAL_MS)) {
+                lastFrameProbePostMs = now;
+                final int probeGeneration = ++probeGen;
                 if (BuildVars.DEBUG_VERSION) {
-                    FileLog.d("MainThreadWatchdog: first-frame timeout miss, dt=" + (now - frameArmUptimeMs) + "ms arm=" + frameArmUptimeMs);
+                    FileLog.d("MainThreadWatchdog: frame-probe tick, dt=" + (lastFrameEvidenceMs == 0 ? -1 : now - lastFrameEvidenceMs) + "ms since last frame evidence");
                 }
-                fire("no frame within 15s after resume (vsync-dispatch wedge)");
+                mainHandler.post(() -> {
+                    // Resilient to main slowness: if a newer probe is already pending, this
+                    // stale one is a no-op — the newest probe alone arms the frame callback.
+                    if (probeGeneration != probeGen) {
+                        return;
+                    }
+                    // One-shot: does not re-post itself; the next probe cycle re-arms it.
+                    Choreographer.getInstance().postFrameCallback(frameTimeNanos -> lastFrameEvidenceMs = SystemClock.uptimeMillis());
+                });
+            }
+            if (resumed && screenInteractive() && lastFrameEvidenceMs != 0 && now - lastFrameEvidenceMs >= FRAME_STALL_TIMEOUT_MS) {
+                if (BuildVars.DEBUG_VERSION) {
+                    FileLog.d("MainThreadWatchdog: frame stall detected, dt=" + (now - lastFrameEvidenceMs) + "ms since last frame evidence");
+                }
+                fire("no frame evidence for 15s while resumed and screen interactive (mid-session vsync wedge)");
                 return;
             }
         }
     }
 
+    /**
+     * True when the display is interactive. PowerManager is resolved lazily from the
+     * application context; any failure (context null, service null, binder error) defaults
+     * to true — fail toward detection rather than toward blindness.
+     */
+    private static boolean screenInteractive() {
+        try {
+            PowerManager manager = powerManager;
+            if (manager == null) {
+                Context context = ApplicationLoader.applicationContext;
+                if (context == null) {
+                    return true;
+                }
+                manager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                if (manager == null) {
+                    return true;
+                }
+                powerManager = manager;
+            }
+            return manager.isInteractive();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
     private static void fire(String conditionDescription) {
+        try {
+            FileLog.e("MainThreadWatchdog: requesting thread dump (SIGQUIT) before recovery kill");
+            android.os.Process.sendSignal(android.os.Process.myPid(), 3);
+            Thread.sleep(500);
+        } catch (Throwable t) {
+            // Best-effort native dump; it must never prevent the recovery kill below.
+        }
         try {
             Map<Thread, StackTraceElement[]> allStackTraces = Thread.getAllStackTraces();
             StringBuilder builder = new StringBuilder();
