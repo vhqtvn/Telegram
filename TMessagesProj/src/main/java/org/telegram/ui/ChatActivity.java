@@ -30579,7 +30579,8 @@ public class ChatActivity extends BaseFragment implements
                     if (avatarContainer != null) {
                         avatarContainer.getViewTreeObserver().removeOnPreDrawListener(this);
                     }
-                    return fixLayoutInternal();
+                    fixLayoutInternal();
+                    return true;
                 }
             });
         }
