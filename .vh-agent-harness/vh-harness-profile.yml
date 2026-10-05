@@ -6,5 +6,6 @@ features:
     resolve-first-pilot: true
 overlays:
     - auto-classifier-pilot
+    - session-progress-pilot
 capabilities:
     - core/gated-commit

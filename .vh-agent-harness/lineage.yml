@@ -7,7 +7,7 @@ lineage_version: "1"
 template:
     source: templates/core
     commit: ""
-    ref: harness/0.26.2
+    ref: harness/0.28.0
 copier:
     version: ""
 answers:
@@ -19,6 +19,6 @@ answers:
         project_name: Telegram
         project_slug: telegram
 render:
-    last_successful_update_id: d7fb365f9cf7d914
-    last_successful_render_at: "2026-09-15T09:50:52Z"
+    last_successful_update_id: 4781e1cf68d6ca56
+    last_successful_render_at: "2026-10-05T18:08:56Z"
     rendered_by: embed-fs
