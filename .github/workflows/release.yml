@@ -1,0 +1,169 @@
+# Release build — signed AAB + sideload APK for internal distribution.
+#
+# Trigger policy (deliberate):
+#   - workflow_dispatch: manual runs for testing the pipeline without tagging.
+#   - push to tags 'v*': the only automatic trigger. NEVER on branch push — a
+#     full native release build is expensive (NDK/CMake for 4 ABIs) and is only
+#     worth it when a release artifact is actually wanted.
+#
+# Secrets mapping (GitHub repo secrets -> build inputs):
+#   TELEGRAM_API_ID    -> local.properties TELEGRAM_API_ID    (read by getProps/
+#                         patchBuildVars, TMessagesProj/build.gradle:242-279;
+#                         BuildVars.java placeholders are restored post-build,
+#                         so real credentials never land in any artifact's source
+#                         tree — they ARE compiled into the binary, same as any
+#                         Telegram fork).
+#   TELEGRAM_API_HASH  -> local.properties TELEGRAM_API_HASH  (same mechanism).
+#   KEYSTORE_BASE64    -> base64 of the release keystore file, decoded to
+#                         .local/config/android-keys/release.keystore.
+#   KEYSTORE_PASSWORD  -> signing.properties RELEASE_STORE_PASSWORD.
+#   KEY_ALIAS          -> signing.properties RELEASE_KEY_ALIAS.
+#   KEY_PASSWORD       -> signing.properties RELEASE_KEY_PASSWORD.
+#
+#   The signing file targets the exact mechanism added in fork commits
+#   003b58bd6 / 1abe7d2ba (TMessagesProj_App/build.gradle:50-71): gradle
+#   properties first, then the gitignored .local/config/android-keys/
+#   signing.properties, then committed dummies. We write the properties file —
+#   RELEASE_STORE_FILE is resolved via rootProject.file(), i.e. repo-root
+#   relative (or absolute). Local operator builds use the same file with the
+#   *_PASSWORD_FILE indirection; CI passes passwords inline in the properties
+#   file instead (both forms are supported by the resolver).
+
+name: Release build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel an in-flight release build for the same tag; just queue.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Signed AAB + APK (afat release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout (submodules recursive, shallow — required for the native build)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up JDK 21 (temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (wrapper + build/caches)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Accept Android SDK licenses + install SDK CMake 3.22.1
+        # Pre-accept android-sdk-license (mirrors the local ~/android-sdk layout)
+        # so AGP can auto-install platform 36 / build-tools 36.0.0 / NDK
+        # 27.2.12479018 on demand at build time. The SDK cmake component is
+        # what externalNativeBuild needs (TMessagesProj_App/build.gradle:214
+        # pins cmake version '3.22.1'); the runner's system cmake is unrelated.
+        run: |
+          mkdir -p "$ANDROID_SDK_ROOT/licenses"
+          printf '\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\n' > "$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null
+
+      - name: Write API credentials (local.properties for patchBuildVars)
+        # getProps (TMessagesProj/build.gradle:242-251) reads these two keys from
+        # local.properties at the repo root; patchBuildVars injects them into
+        # BuildVars.java before compilation and restores the committed
+        # placeholders when the build ends. sdk.dir is intentionally NOT set:
+        # GitHub runners preconfigure ANDROID_HOME/ANDROID_SDK_ROOT, and AGP
+        # falls back to those when local.properties has no sdk.dir.
+        run: |
+          printf 'TELEGRAM_API_ID=%s\nTELEGRAM_API_HASH=%s\n' \
+            "${{ secrets.TELEGRAM_API_ID }}" "${{ secrets.TELEGRAM_API_HASH }}" > local.properties
+
+      - name: Write signing config (decode keystore + signing.properties)
+        # Exact read side (TMessagesProj_App/build.gradle:52-55): the build loads
+        # rootProject.file('.local/config/android-keys/signing.properties') if it
+        # exists; .local/config/ is gitignored. Keystore path resolution
+        # (build.gradle:68): rootProject.file(RELEASE_STORE_FILE) — repo-root
+        # relative here, matching the operator's local layout.
+        run: |
+          mkdir -p .local/config/android-keys
+          printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > .local/config/android-keys/release.keystore
+          printf 'RELEASE_STORE_FILE=%s\nRELEASE_STORE_PASSWORD=%s\nRELEASE_KEY_ALIAS=%s\nRELEASE_KEY_PASSWORD=%s\n' \
+            '.local/config/android-keys/release.keystore' \
+            "${{ secrets.KEYSTORE_PASSWORD }}" \
+            "${{ secrets.KEY_ALIAS }}" \
+            "${{ secrets.KEY_PASSWORD }}" > .local/config/android-keys/signing.properties
+
+      - name: Build signed AAB + APK (afat release)
+        # Task names verified: bundleAfatRelease / assembleAfatRelease exist on
+        # :TMessagesProj_App. APK output is renamed app.apk by the build
+        # (outputFileName, TMessagesProj_App/build.gradle:190).
+        run: ./gradlew :TMessagesProj_App:bundleAfatRelease :TMessagesProj_App:assembleAfatRelease --stacktrace
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: TMessagesProj_App/build/outputs/bundle/afatRelease/*.aab
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload APK artifact (sideload)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: TMessagesProj_App/build/outputs/apk/afat/release/app.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload R8 mapping (for crash de-obfuscation)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mapping
+          path: TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      # ---- Play upload stub — NOT ENABLED (operator not publishing yet) ----
+      # Wiring this later is a 5-minute edit: create the PLAY_SERVICE_ACCOUNT_JSON
+      # secret (Play Console service account JSON), grant it release access to
+      # vn.vhn.telegram, then uncomment. Upload the AAB (not the APK) for Play;
+      # keep the APK artifact for sideload/internal testing.
+      # - name: Upload to Google Play (internal track)
+      #   uses: r0adkll/upload-google-play@v1
+      #   with:
+      #     serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      #     packageName: vn.vhn.telegram
+      #     releaseFiles: TMessagesProj_App/build/outputs/bundle/afatRelease/*.aab
+      #     track: internal
+      #     status: completed
+      #     mappingFile: TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt
+
+      - name: Job summary (version + artifacts)
+        run: |
+          VERSION_NAME="$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d= -f2)"
+          VERSION_CODE="$(grep '^APP_VERSION_CODE=' gradle.properties | cut -d= -f2)"
+          {
+            echo "## Release build — afat release"
+            echo "- **Version**: ${VERSION_NAME} (${VERSION_CODE})"
+            echo "- **versionCode in APK**: $((VERSION_CODE * 10)) (APP_VERSION_CODE * 10 + afat abiVersionCode, TMessagesProj_App/build.gradle:191)"
+            echo "- **Commit**: \`${GITHUB_SHA}\`"
+            echo "- **Ref**: \`${GITHUB_REF}\`"
+            echo ""
+            echo "| Artifact | Path |"
+            echo "|---|---|"
+            echo "| AAB (Play) | \`TMessagesProj_App/build/outputs/bundle/afatRelease/*.aab\` |"
+            echo "| APK (sideload) | \`TMessagesProj_App/build/outputs/apk/afat/release/app.apk\` |"
+            echo "| R8 mapping | \`TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt\` |"
+            echo ""
+            echo "All three are attached to this run as workflow artifacts (30-day retention)."
+          } >> "$GITHUB_STEP_SUMMARY"
