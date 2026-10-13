@@ -19,6 +19,13 @@
 #   KEYSTORE_PASSWORD  -> signing.properties RELEASE_STORE_PASSWORD.
 #   KEY_ALIAS          -> signing.properties RELEASE_KEY_ALIAS.
 #   KEY_PASSWORD       -> signing.properties RELEASE_KEY_PASSWORD.
+#   PLAY_SERVICE_ACCOUNT_JSON (optional) -> r0adkll/upload-google-play service
+#                         account JSON with release access to vn.vhn.telegram.
+#                         Required ONLY when the Play upload runs (upload_to_play
+#                         dispatch input, or a v* tag). `if:` cannot test secret
+#                         presence, so a toggled run without the secret fails at
+#                         the named upload step — that is the intended
+#                         misconfiguration signal. See docs/play/internal-listing.md.
 #
 #   The signing file targets the exact mechanism added in fork commits
 #   003b58bd6 / 1abe7d2ba (TMessagesProj_App/build.gradle:50-71): gradle
@@ -33,6 +40,11 @@ name: Release build
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_to_play:
+        description: 'Also upload the AAB to the Play internal testing track'
+        type: boolean
+        default: false
   push:
     tags:
       - 'v*'
@@ -133,22 +145,43 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ---- Play upload stub — NOT ENABLED (operator not publishing yet) ----
-      # Wiring this later is a 5-minute edit: create the PLAY_SERVICE_ACCOUNT_JSON
-      # secret (Play Console service account JSON), grant it release access to
-      # vn.vhn.telegram, then uncomment. Upload the AAB (not the APK) for Play;
-      # keep the APK artifact for sideload/internal testing.
-      # - name: Upload to Google Play (internal track)
-      #   uses: r0adkll/upload-google-play@v1
-      #   with:
-      #     serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-      #     packageName: vn.vhn.telegram
-      #     releaseFiles: TMessagesProj_App/build/outputs/bundle/afatRelease/*.aab
-      #     track: internal
-      #     status: completed
-      #     mappingFile: TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt
+      - name: Locate AAB output (filename is never hardcoded)
+        id: find_aab
+        # The bundle filename embeds the version and was never verified locally;
+        # discover it from the build output (same tree the artifact step
+        # uploads, which already fails the run if no AAB exists) and export the
+        # path for the Play upload step.
+        run: |
+          AAB="$(find TMessagesProj_App/build/outputs/bundle -type f -name '*.aab' | sort | head -n 1)"
+          if [ -z "$AAB" ]; then
+            echo "ERROR: no .aab found under TMessagesProj_App/build/outputs/bundle/" >&2
+            exit 1
+          fi
+          echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
+          echo "Play upload will use AAB: $AAB"
+
+      - name: Upload to Google Play (internal testing track)
+        # REQUIRES the PLAY_SERVICE_ACCOUNT_JSON repo secret (Play Console
+        # service-account JSON with release access to vn.vhn.telegram — setup:
+        # docs/play/internal-listing.md). A boolean `if:` cannot ALSO test
+        # secret presence, so a run toggled with the secret missing fails HERE,
+        # at this named step — loud and attributable by design.
+        if: inputs.upload_to_play == true || startsWith(github.ref, 'refs/tags/v')
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: vn.vhn.telegram
+          releaseFiles: ${{ steps.find_aab.outputs.aab_path }}
+          track: internal
+          status: completed
+          mappingFile: TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt
 
       - name: Job summary (version + artifacts)
+        # always(): the summary carries the Play-secret requirement note — it
+        # is exactly what the operator needs to see when the deliberate loud
+        # upload-step failure fires (e.g. upload_to_play toggled with the
+        # secret missing).
+        if: always()
         run: |
           VERSION_NAME="$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d= -f2)"
           VERSION_CODE="$(grep '^APP_VERSION_CODE=' gradle.properties | cut -d= -f2)"
@@ -166,4 +199,6 @@ jobs:
             echo "| R8 mapping | \`TMessagesProj_App/build/outputs/mapping/afatRelease/mapping.txt\` |"
             echo ""
             echo "All three are attached to this run as workflow artifacts (30-day retention)."
+            echo ""
+            echo "Play upload (internal testing): runs only when the \`upload_to_play\` dispatch input is set or the run was triggered by a \`v*\` tag — it additionally requires the \`PLAY_SERVICE_ACCOUNT_JSON\` repo secret (see \`docs/play/internal-listing.md\`); with the secret missing the run fails at the upload step."
           } >> "$GITHUB_STEP_SUMMARY"
