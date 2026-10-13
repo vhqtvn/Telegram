@@ -26,6 +26,8 @@ TMessagesProj/jni/ffmpeg/build_android
 .local/config/
 .local/ssh/
 .local/demo-server/
+# Google Play service account (operator-local secret)
+play-service-account.json
 # --- Repo-scoped scratch (agent runs, logs, temp) ---
 tmp/
 *.log
