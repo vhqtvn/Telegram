@@ -3,6 +3,13 @@
   "successful_render_id": "4781e1cf68d6ca56",
   "entries": [
     {
+      "destination_path": ".opencode/skills/bump/SKILL.md",
+      "producer_kind": "overlay_skill",
+      "overlay_pack": "bump-pilot",
+      "source_relative_path": "skills/bump/SKILL.md",
+      "rendered_digest": "sha256:94746eb1c159619bc4277442c4c254aa1471bfb0cb651fbda3e9b967c57652b8"
+    },
+    {
       "destination_path": ".opencode/skills/contract-invariant-audit/SKILL.md",
       "producer_kind": "overlay_skill",
       "overlay_pack": "contract-invariant-audit-pilot",
