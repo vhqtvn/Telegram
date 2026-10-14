@@ -1,0 +1,26 @@
+// bump-pilot/opencode-append.jsonc — minimal pack contribution
+//
+// Registers the bumper agent. The `permission` block below is a SKELETON:
+// the Go permission emitter overwrites bash/task/edit from this pack's
+// permission-pack.jsonc + the project transform — the placeholder entries
+// here are discarded. The block's PRESENCE is load-bearing: the emitter only
+// rewrites keys that already exist on the agent block (emit.go "if _, ok :="
+// guards), so omitting it leaves the agent with no emitted permissions at
+// all. Keep the three keys (bash/task/edit) even though their values here
+// are inert. delegateFrom task-edges for build/coordination/
+// project-coordinator come from permission-pack.jsonc via the emitter.
+{
+  "agent": {
+    "bumper": {
+      "description": "Resolution authority for gated upstream release rebases — directs Tools/bump-gate.sh verbs (dispatcher-executed; see invocation-split note), Edit-tool conflict resolution per the local-changes registry, never fetches/commits/pushes. Dispatch from build/coordination/project-coordinator with a per-file cheat-sheet.",
+      "mode": "subagent",
+      "prompt": "{file:.opencode/agents/bumper.md}",
+      "permission": {
+        "edit": "allow",
+        "webfetch": "deny",
+        "task": { "*": "deny" },
+        "bash": { "*": "deny" }
+      }
+    }
+  }
+}

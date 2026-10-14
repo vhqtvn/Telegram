@@ -70,19 +70,32 @@
 // Default: no-op. Edit this function body to return permission patches.
 // When permissionPatches is empty, the transform has zero effect —
 // opencode.jsonc is emitted byte-identically to the no-transform path.
+//
+// ── WHY THERE IS NO BUMPER GRANT HERE (bump-pilot finding, 2026-10-13) ──
+//
+// The obvious patch — granting bumper `Tools/bump-gate.sh *` (direct) or
+// `vh-agent-harness exec Tools/bump-gate.sh *` (routed) — is a DEAD GRANT in
+// this harness version, and dead allow grants make `vh-agent-harness doctor`
+// FAIL (repo UNHEALTHY, blocks release G0c). Two independent engine facts:
+//
+//   1. Direct form: shell-guard hard-denies every non-git, non-harness
+//      command that misses the read-only allowlist BEFORE per-agent tables
+//      are consulted (shell-guard-core.js final deny branch — "the TrueAI
+//      defect class" in internal/permconfig/dead_grant_lint.go). A per-agent
+//      allow for `Tools/bump-gate.sh *` can never fire.
+//   2. Routed form: the emitter places transform entries BEFORE the trailing
+//      `"vh-agent-harness *"` entry; under opencode's findLast semantics the
+//      trailing entry (deny, per bumper's pack declaration) always wins. The
+//      only after-wildcard channel (ReadOnlyExtraAllows, exec-sandbox style)
+//      is core-tables-only — a pack agent cannot use it.
+//
+// Interim (documented in skills/bump + agents/bumper.md): the DISPATCHER
+// (build — has `vh-agent-harness *: allow`) drives all gate verbs as
+// `vh-agent-harness exec Tools/bump-gate.sh <verb> <ref>`; the bumper agent
+// directs the sequence, resolves conflicts with the Edit tool, and verifies.
+// Route A promotion (or a harness release adding a pack-expressible harness
+// exec carve-out / engine-recognized bump-gate family) can move verb
+// execution into the bumper; add the grant here ONLY when one of those lands.
 export default function transform({ context }) {
-  // Example (uncomment and edit):
-  //
-  // return {
-  //   permissionPatches: [
-  //     {
-  //       agent: "build",
-  //       bash: [
-  //         { pattern: "./dev.sh *", decision: "allow" },
-  //       ],
-  //     },
-  //   ],
-  // };
-
   return { permissionPatches: [] };
 }

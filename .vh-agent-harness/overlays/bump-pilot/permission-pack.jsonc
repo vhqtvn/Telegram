@@ -1,0 +1,56 @@
+// bump-pilot/permission-pack.jsonc — pack permission self-description
+//
+// The bumper agent: the rebase-conflict RESOLUTION specialist (sole authority
+// on resolving gated-bump conflicts). Its bash surface is DELIBERATELY
+// minimal and read-only — in this harness version it CANNOT hold the gate
+// invocation grant at all:
+//   - a direct `Tools/bump-gate.sh *` allow is a DEAD GRANT (shell-guard
+//     hard-denies non-git, non-harness commands before per-agent tables —
+//     dead_grant_lint "TrueAI defect class"), and
+//   - a routed `vh-agent-harness exec Tools/bump-gate.sh *` allow loses to
+//     the trailing `"vh-agent-harness *"` entry under findLast (transform
+//     entries are emitted BEFORE it; the after-wildcard channel is
+//     core-tables-only).
+// Either dead grant makes `vh-agent-harness doctor` FAIL. So the DISPATCHER
+// (build) drives the gate verbs; bumper directs/resolves/verifies. See
+// .vh-agent-harness/config-transform.mjs for the full finding.
+//
+// Mapping to the design contract:
+//   "git readonly verbs allow"    → location.git_readonly: allow
+//   "git * deny"                  → location.gate: deny (git mutation verbs are
+//                                   unconditionally denied by shell-guard's
+//                                   git-mutation-bypass for every agent; the
+//                                   gate decision additionally denies the
+//                                   commit-gate.sh surface for this agent)
+//   "vh-agent-harness * deny"     → location.harness: deny (kept AS DESIGNED —
+//                                   it is what makes the exec-routed grant
+//                                   unsatisfiable; relaxing it to allow would
+//                                   admit every harness verb, violating the
+//                                   contract more broadly)
+//   "edit allow (repo-wide)"      → location.edit: allow (conflict resolution
+//                                   is prompt-scoped to rebase resolution)
+//
+// Task edges: deliberately NO outbound delegation ("*": "deny"). A
+// commit-reviewer edge IS expressible here, but review routing for landed
+// bumps stays with the coordinator (R5/registry flow per skills/bump) — the
+// bumper reports, it does not self-arrange reviews.
+{
+  "agents": {
+    "bumper": {
+      "location": {
+        "wildcard": "deny",
+        "readonly": "allow",
+        "git_readonly": "allow",
+        "gate": "deny",
+        "harness": "deny",
+        "edit": "allow"
+      },
+      "task": { "*": "deny" },
+      "delegateFrom": [
+        "build",
+        "coordination",
+        "project-coordinator"
+      ]
+    }
+  }
+}

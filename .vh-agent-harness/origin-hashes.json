@@ -65,7 +65,7 @@
     ".opencode/commands/write-task.md": "sha256:c9ab7ae25028547401edc45f72c9f8e65a1e3a159003d830dbb53927a1a06fdc",
     ".opencode/config/review-tiers.json": "sha256:0d9539591a0fbe230d115ab0038d6909f59d8ef2e1680f5ad4375207bc25da13",
     ".opencode/docs/agents/README.md": "sha256:5f879421c694ad5cff1ef42937cc5ef066746ec5037bc982bd92fc09750d9f5a",
-    ".opencode/docs/agents/callable-graph.md": "sha256:6a88e998b1036bcf886f270cc3057bee1667e7f70f6f456a18ed289281e5f425",
+    ".opencode/docs/agents/callable-graph.md": "sha256:914eb0706963c6154ca42dff0ebe9dbc1dbe6f66c8f0b61a9b2fe80d4e59d082",
     ".opencode/docs/agents/commit-reviewer-modes.md": "sha256:a85eb2edd5c7c889225a22ac7085cf4ce352cfa5eb2e8761c384f8c4c0228ac6",
     ".opencode/docs/agents/permission-templates.md": "sha256:9d9c2cbd2d2f350126ca62c8e6c0d26c27f47ddfdb3b4e2bf98a5bec42eae89b",
     ".opencode/docs/agents/read-only-execution-policy.md": "sha256:efd0c5899fdcc8ea424d0107f13e352bac9409fac7ae195053674f3c8e8a439f",
@@ -176,6 +176,6 @@
     "docs/coordination/schemas/standard-report.schema.json": "sha256:0ab50a39df9d390ffa7dbddd3963809d7102774658348a00118691c89a432974",
     "docs/coordination/schemas/synthesis-report.schema.json": "sha256:34478e9f0164e1d651a78deacf9dc254ff299f15e28158469661469b826a89a6",
     "docs/coordination/schemas/task-card.schema.json": "sha256:f8dd72e575d823358042df47d19b0f675d00d4780415583c7a2001ee3fa97f67",
-    "opencode.jsonc": "sha256:1479e1ceb93941d9e2060b470c4100920b1a0833bbf3af9d90075c8d04a1e7fc"
+    "opencode.jsonc": "sha256:0cf70e2877312b56403197457f38ca1f1704ad46cb0f7950de319fb192efb64b"
   }
 }
