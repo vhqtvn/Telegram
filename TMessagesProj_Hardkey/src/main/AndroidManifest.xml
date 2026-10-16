@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Auto-init: the platform instantiates this provider before
+             Application.onCreate(); we use that slot to install the
+             activity-lifecycle hook. High initOrder = initialized last
+             among the process's providers. -->
+        <provider
+            android:name="org.telegram.hardkey.HardkeyInit"
+            android:authorities="${applicationId}.hardkeyinit"
+            android:exported="false"
+            android:initOrder="2147483646" />
+    </application>
+
+</manifest>
