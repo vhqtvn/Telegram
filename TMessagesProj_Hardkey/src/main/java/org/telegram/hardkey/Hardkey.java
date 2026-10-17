@@ -1,19 +1,136 @@
 package org.telegram.hardkey;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.os.Process;
+import android.view.KeyEvent;
+
 /**
- * Hardkey D0/D1 bootstrap — hardware-keyboard navigation for e-ink phones.
+ * Hardkey D0/D1/D2 bootstrap — hardware-keyboard navigation for e-ink phones.
  *
- * Global toggle plus shared constants. ENABLED gates key ROUTING only;
- * observation (DriftReport) runs regardless, so drift data keeps
- * accumulating even while routing is disabled.
+ * D2 turns the master switch into runtime state:
+ *  - default ON in debug builds, OFF in release builds (BuildConfig.DEBUG);
+ *  - a persisted override lives in SharedPreferences, loaded and stored on a
+ *    private daemon thread so the main thread never blocks on disk;
+ *  - runtime toggle: CTRL+SHIFT+H (exactly those modifiers), documented here.
+ *
+ * While disabled the module is inert: the window callback stays installed
+ * (it is the only path through which the toggle combo can arrive) but does
+ * pure delegation — no routing, no key observation, no logging beyond the
+ * init/toggle lines emitted through DriftReport.eventAlways().
  */
 public final class Hardkey {
 
     public static final String LOG_TAG = "HardkeyDrift";
 
-    /** Master switch for key routing. Observation is never gated. */
-    public static volatile boolean ENABLED = true;
+    /** Kill-switch state. Default: on in debug builds, off in release builds. */
+    private static volatile boolean enabled = BuildConfig.DEBUG;
+
+    private static final String PREFS_NAME = "hardkey.pref";
+    private static final String PREF_HAS_OVERRIDE = "enabled_override_present";
+    private static final String PREF_ENABLED = "enabled";
+
+    private static volatile Context appContext;
 
     private Hardkey() {
+    }
+
+    /**
+     * Wiring from HardkeyInit: caches the application context, emits the one
+     * init line stating the routing state, and kicks off the asynchronous
+     * override load (background thread, never main-thread disk I/O).
+     *
+     * Note the small inherent race: until the loader thread finishes, the
+     * state is the build default rather than the persisted override. For a
+     * hardware-navigation switch this is acceptable (worst case: one extra
+     * or missing routed key in the first milliseconds of process life).
+     */
+    static void init(Context context, boolean installerRegistered) {
+        appContext = context != null ? context.getApplicationContext() : null;
+        DriftReport.eventAlways("init: lifecycle installer "
+                + (installerRegistered ? "registered" : "NOT registered")
+                + " (pid " + Process.myPid() + "), routing state="
+                + (enabled ? "enabled" : "disabled")
+                + (BuildConfig.DEBUG ? " (debug default)" : " (release default)"));
+        final Context app = appContext;
+        if (app != null) {
+            Thread loader = new Thread("hardkey-prefs-load") {
+                @Override
+                public void run() {
+                    try {
+                        SharedPreferences prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                        if (prefs.getBoolean(PREF_HAS_OVERRIDE, false)) {
+                            enabled = prefs.getBoolean(PREF_ENABLED, BuildConfig.DEBUG);
+                            DriftReport.eventAlways("kill-switch: persisted override loaded (state="
+                                    + (enabled ? "enabled" : "disabled") + ")");
+                        }
+                    } catch (Throwable t) {
+                        // Persistence is best-effort; keep the build default.
+                    }
+                }
+            };
+            loader.setDaemon(true);
+            loader.start();
+        }
+    }
+
+    static boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Flips the kill-switch and persists the override asynchronously
+     * (apply() on the loader-style daemon thread; main thread never waits).
+     */
+    static void toggle() {
+        enabled = !enabled;
+        DriftReport.eventAlways("kill-switch: routing " + (enabled ? "enabled" : "disabled")
+                + " (CTRL+SHIFT+H)");
+        final Context app = appContext;
+        final boolean value = enabled;
+        if (app != null) {
+            Thread writer = new Thread("hardkey-prefs-write") {
+                @Override
+                public void run() {
+                    try {
+                        app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean(PREF_HAS_OVERRIDE, true)
+                                .putBoolean(PREF_ENABLED, value)
+                                .apply();
+                    } catch (Throwable t) {
+                        // Best-effort persistence; in-memory state already flipped.
+                    }
+                }
+            };
+            writer.setDaemon(true);
+            writer.start();
+        }
+    }
+
+    /**
+     * The documented runtime toggle combo: H with CTRL and SHIFT held, no
+     * other modifiers. Recognized even while the kill-switch is OFF — it is
+     * the only way back on. Consumed by the wrapper, never forwarded.
+     */
+    static boolean isKillSwitchCombo(KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN
+                || event.getKeyCode() != KeyEvent.KEYCODE_H) {
+            return false;
+        }
+        int meta = event.getMetaState();
+        boolean ctrl = (meta & (KeyEvent.META_CTRL_ON
+                | KeyEvent.META_CTRL_LEFT_ON
+                | KeyEvent.META_CTRL_RIGHT_ON)) != 0;
+        boolean shift = (meta & (KeyEvent.META_SHIFT_ON
+                | KeyEvent.META_SHIFT_LEFT_ON
+                | KeyEvent.META_SHIFT_RIGHT_ON)) != 0;
+        boolean other = (meta & ~(KeyEvent.META_CTRL_ON
+                | KeyEvent.META_CTRL_LEFT_ON
+                | KeyEvent.META_CTRL_RIGHT_ON
+                | KeyEvent.META_SHIFT_ON
+                | KeyEvent.META_SHIFT_LEFT_ON
+                | KeyEvent.META_SHIFT_RIGHT_ON)) != 0;
+        return ctrl && shift && !other;
     }
 }

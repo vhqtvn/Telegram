@@ -33,11 +33,28 @@ public class HardkeyWindowCallback implements Window.Callback {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        DriftReport.key(event);
-        if (Hardkey.ENABLED && KeyRouter.route(activity, event)) {
+        // The kill-switch combo is recognized in every state: it is the only
+        // path back on once routing is disabled. It is consumed here and
+        // never forwarded, so it can never type an H anywhere.
+        if (Hardkey.isKillSwitchCombo(event)) {
+            Hardkey.toggle();
+            return true;
+        }
+        if (!Hardkey.isEnabled()) {
+            // Kill-switch OFF: wrapper stays installed but behaviorally
+            // inert — byte-identical pure delegation, no observation.
+            return delegate.dispatchKeyEvent(event);
+        }
+        DriftReport.key(event, isEditorFocused());
+        if (KeyRouter.route(activity, event)) {
             return true;
         }
         return delegate.dispatchKeyEvent(event);
+    }
+
+    private boolean isEditorFocused() {
+        View focus = activity.getCurrentFocus();
+        return focus != null && focus.onCheckIsTextEditor();
     }
 
     // ── everything below is pure delegation ────────────────────────────────

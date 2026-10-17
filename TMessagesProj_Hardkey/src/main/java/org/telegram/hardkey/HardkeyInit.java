@@ -3,27 +3,29 @@ package org.telegram.hardkey;
 import android.app.Application;
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Process;
 
 /**
  * Auto-init entry point (D0). Declared in this library's manifest; the
  * platform instantiates and initializes it before Application.onCreate().
- * That slot is used to register the activity-lifecycle installer. The
- * provider surface itself is a no-op: query returns null, mutators return 0.
+ * That slot is used to register the activity-lifecycle installer and to
+ * initialize the kill-switch state (D2). The provider surface itself is a
+ * no-op: query returns null, mutators return 0.
  */
 public class HardkeyInit extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        if (getContext() != null && getContext().getApplicationContext() instanceof Application) {
-            Application app = (Application) getContext().getApplicationContext();
+        Context context = getContext();
+        boolean registered = false;
+        if (context != null && context.getApplicationContext() instanceof Application) {
+            Application app = (Application) context.getApplicationContext();
             app.registerActivityLifecycleCallbacks(new HardkeyInstaller());
-            DriftReport.event("init: lifecycle installer registered (pid " + Process.myPid() + ")");
-        } else {
-            DriftReport.event("init: no Application context, installer NOT registered");
+            registered = true;
         }
+        Hardkey.init(context, registered);
         return true;
     }
 
