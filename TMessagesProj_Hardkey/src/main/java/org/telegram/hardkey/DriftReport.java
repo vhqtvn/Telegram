@@ -159,6 +159,31 @@ public final class DriftReport {
                 + " " + list.getWidth() + "x" + list.getHeight());
     }
 
+    // ── D3 receipts: positions and coordinates only, never keycodes ────────
+
+    /** Selection-move receipt: which row the selection landed on. */
+    public static void selected(View list, int position) {
+        event("select: pos=" + position
+                + " on " + list.getClass().getSimpleName()
+                + " " + list.getWidth() + "x" + list.getHeight());
+    }
+
+    /** Activation receipt: the row was clicked through the real path. */
+    public static void activated(View list, int position) {
+        event("activate: pos=" + position + " via RecyclerListView.clickItem on "
+                + list.getClass().getSimpleName());
+    }
+
+    /** Chat-switch receipt (n/p on the dialogs list). */
+    public static void chatSwitch(boolean next, int position) {
+        event("chat: " + (next ? "next" : "prev") + " pos=" + position);
+    }
+
+    /** Ring-overlay position receipt (decor-content coordinates). */
+    public static void ringAt(int left, int top, int right, int bottom) {
+        event("ring: [" + left + "," + top + " " + right + "," + bottom + "]");
+    }
+
     private static String ts() {
         return TS.format(new Date());
     }

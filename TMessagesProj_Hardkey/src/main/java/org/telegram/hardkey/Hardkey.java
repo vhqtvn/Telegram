@@ -81,11 +81,17 @@ public final class Hardkey {
     /**
      * Flips the kill-switch and persists the override asynchronously
      * (apply() on the loader-style daemon thread; main thread never waits).
+     * Turning OFF also drops the D3 selection and hides the ring overlay
+     * immediately (main-thread call from dispatchKeyEvent) so no hardkey
+     * visual state survives the switch.
      */
     static void toggle() {
         enabled = !enabled;
         DriftReport.eventAlways("kill-switch: routing " + (enabled ? "enabled" : "disabled")
                 + " (CTRL+SHIFT+H)");
+        if (!enabled) {
+            SelectionController.onRoutingDisabled();
+        }
         final Context app = appContext;
         final boolean value = enabled;
         if (app != null) {

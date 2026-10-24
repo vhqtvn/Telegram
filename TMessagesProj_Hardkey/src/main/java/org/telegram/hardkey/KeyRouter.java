@@ -12,14 +12,25 @@ import java.util.Deque;
 import java.util.HashSet;
 
 /**
- * D1/D2 key routing:
+ * D1/D2/D3 key routing:
  *
  *   SPACE / PAGE_DOWN      → primary RecyclerView down one page
  *   SHIFT+SPACE / PAGE_UP  → primary RecyclerView up one page
  *   ESCAPE                 → activity.onBackPressed()
+ *   DPAD_DOWN / DPAD_UP    → selection moves one row in the primary list
+ *                            (D3; repeats arrive as further DOWN events and
+ *                            each moves one step — continuous movement)
+ *   ENTER / DPAD_CENTER    → activate the selected row (D3, real clickItem
+ *                            path; no selection ⇒ fall through)
+ *   N / P / VOLUME_DOWN    → next / prev chat on the dialogs list (D3,
+ *                            best-effort; see SelectionController)
  *
- * Typing passthrough: when the focused view is a text editor, scroll keys
- * fall through to the original callback so typing is unaffected.
+ * Arrows and page keys coexist: arrows move the item selection, Space/PgDn
+ * keep page-scrolling even while a selection is active.
+ *
+ * Typing passthrough: when the focused view is a text editor, scroll and
+ * selection keys fall through to the original callback so typing (and text
+ * navigation) is unaffected.
  *
  * UP/DOWN pairing (D2): follow-up events (UP/MULTIPLE) of routed keys are
  * consumed ONLY when their DOWN was consumed here. A DOWN that falls
@@ -81,6 +92,46 @@ final class KeyRouter {
             return true;
         }
 
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            boolean down = keyCode == KeyEvent.KEYCODE_DPAD_DOWN;
+            DriftReport.event("route: select-" + (down ? "down" : "up")
+                    + " (keycode " + keyCode
+                    + (event.getRepeatCount() > 0
+                            ? " repeat=" + event.getRepeatCount() : "")
+                    + ") on " + activity.getClass().getSimpleName());
+            boolean handled = SelectionController.moveSelection(activity, down);
+            if (handled) {
+                CONSUMED_DOWNS.add(pairKey(event));
+            }
+            return handled;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+            DriftReport.event("route: activate (keycode " + keyCode + ") on "
+                    + activity.getClass().getSimpleName());
+            boolean handled = SelectionController.activateSelected(activity);
+            if (handled) {
+                CONSUMED_DOWNS.add(pairKey(event));
+            }
+            return handled;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_N
+                || keyCode == KeyEvent.KEYCODE_P
+                || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            boolean next = keyCode == KeyEvent.KEYCODE_N;
+            DriftReport.event("route: chat-" + (next ? "next" : "prev")
+                    + " (keycode " + keyCode + ") on "
+                    + activity.getClass().getSimpleName());
+            boolean handled = SelectionController.switchChat(activity, next);
+            if (handled) {
+                CONSUMED_DOWNS.add(pairKey(event));
+            }
+            return handled;
+        }
+
         boolean up = event.isShiftPressed() || keyCode == KeyEvent.KEYCODE_PAGE_UP;
         DriftReport.event("route: " + (up ? "page-up" : "page-down")
                 + " (keycode " + keyCode + (event.isShiftPressed() ? " +shift" : "") + ")"
@@ -96,7 +147,15 @@ final class KeyRouter {
         return keyCode == KeyEvent.KEYCODE_SPACE
                 || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
                 || keyCode == KeyEvent.KEYCODE_PAGE_UP
-                || keyCode == KeyEvent.KEYCODE_ESCAPE;
+                || keyCode == KeyEvent.KEYCODE_ESCAPE
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_N
+                || keyCode == KeyEvent.KEYCODE_P
+                || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN;
     }
 
     private static boolean isEditorFocused(Activity activity) {
@@ -128,9 +187,11 @@ final class KeyRouter {
     /**
      * Primary list = largest visible RecyclerView found by decor-view
      * traversal. Records the discovery to DriftReport for every routed key
-     * press (cheap at human key-press rates).
+     * press (cheap at human key-press rates). Package-private since D3:
+     * SelectionController uses the same discovery for selection and
+     * activation (one notion of "the list on this screen").
      */
-    private static RecyclerView findPrimaryList(Activity activity) {
+    static RecyclerView findPrimaryList(Activity activity) {
         View decor = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
         if (!(decor instanceof ViewGroup)) {
             return null;

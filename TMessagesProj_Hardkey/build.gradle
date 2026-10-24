@@ -27,8 +27,18 @@ android {
 }
 
 dependencies {
-    // Compile-time only. At runtime these types resolve against the
-    // androidx.recyclerview.widget.RecyclerView vendored into TMessagesProj
-    // at the same FQCN (the app excludes the maven artifact globally).
-    compileOnly 'androidx.recyclerview:recyclerview:1.3.2'
+    // D3: the real TMessagesProj classes (RecyclerListView.clickItem for the
+    // activation path, vendored androidx RecyclerView/LinearLayoutManager at
+    // the exact FQCNs the app ships). Compile-time resolution comes from the
+    // same project the app already packages — no runtime duplication, no
+    // maven/vendored duplicate-class hazard (the app excludes the maven
+    // recyclerview artifact globally). Direct compiled references also
+    // survive R8 consistently (no reflection).
+    implementation project(':TMessagesProj')
+
+    // Compile-time only: the vendored RecyclerView's supertypes reference
+    // androidx.core (ScrollingView, NestedScrollingChild2, ...). TMessagesProj
+    // declares this as `implementation` (not consumer-visible), so resolve it
+    // here at the SAME version; at runtime the app ships the real artifact.
+    compileOnly 'androidx.core:core:1.16.0'
 }
