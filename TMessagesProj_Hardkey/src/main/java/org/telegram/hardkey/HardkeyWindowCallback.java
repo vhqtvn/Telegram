@@ -40,6 +40,19 @@ public class HardkeyWindowCallback implements Window.Callback {
             Hardkey.toggle();
             return true;
         }
+        // D4 combos, same every-state contract. Eink mode is INDEPENDENT
+        // of the routing kill-switch (a display-quality toggle needs no
+        // routing), so both are consumed before the enabled gate. Like the
+        // kill-switch combo, they are never forwarded — CTRL+SHIFT+E/R must
+        // not type E/R into anything.
+        if (Hardkey.isEinkCombo(event)) {
+            EinkMode.toggle(activity);
+            return true;
+        }
+        if (Hardkey.isRefreshCombo(event)) {
+            EinkMode.nudge(activity);
+            return true;
+        }
         if (!Hardkey.isEnabled()) {
             // Kill-switch OFF: wrapper stays installed but behaviorally
             // inert — byte-identical pure delegation, no observation.

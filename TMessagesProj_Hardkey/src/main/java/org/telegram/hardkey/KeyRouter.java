@@ -65,6 +65,13 @@ final class KeyRouter {
             return false;
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            // D4: every routed-key DOWN doubles as an animator-suppression
+            // sweep (no-op, one volatile read, while eink mode is off).
+            // Only reached with routing enabled — the lifecycle sweeps in
+            // HardkeyInstaller cover the routing-off case.
+            EinkMode.clearAnimators(activity);
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
             return routeDown(activity, event, keyCode);
         }
         if (event.getAction() == KeyEvent.ACTION_UP

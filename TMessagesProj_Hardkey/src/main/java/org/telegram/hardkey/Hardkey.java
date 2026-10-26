@@ -26,7 +26,8 @@ public final class Hardkey {
     /** Kill-switch state. Default: on in debug builds, off in release builds. */
     private static volatile boolean enabled = BuildConfig.DEBUG;
 
-    private static final String PREFS_NAME = "hardkey.pref";
+    /** Module prefs file. Package-private: EinkMode (D4) stores its eink_* keys here too. */
+    static final String PREFS_NAME = "hardkey.pref";
     private static final String PREF_HAS_OVERRIDE = "enabled_override_present";
     private static final String PREF_ENABLED = "enabled";
 
@@ -52,6 +53,11 @@ public final class Hardkey {
                 + " (pid " + Process.myPid() + "), routing state="
                 + (enabled ? "enabled" : "disabled")
                 + (BuildConfig.DEBUG ? " (debug default)" : " (release default)"));
+        // D4: eink mode loads its own persisted state behind the same
+        // init seam (own loader thread, own init line, never touches
+        // LiteMode at init time EXCEPT the corrupt-state self-heal
+        // restore — see EinkMode.init).
+        EinkMode.init(context);
         final Context app = appContext;
         if (app != null) {
             Thread loader = new Thread("hardkey-prefs-load") {
@@ -120,8 +126,36 @@ public final class Hardkey {
      * the only way back on. Consumed by the wrapper, never forwarded.
      */
     static boolean isKillSwitchCombo(KeyEvent event) {
+        return isCtrlShiftExact(event, KeyEvent.KEYCODE_H);
+    }
+
+    /**
+     * D4 e-ink mode toggle combo: E with CTRL and SHIFT held (exact same
+     * modifier contract as the kill-switch combo). Recognized in EVERY
+     * state — eink mode is an independent quality toggle and stays
+     * available with routing disabled (interplay decision, see EinkMode).
+     */
+    static boolean isEinkCombo(KeyEvent event) {
+        return isCtrlShiftExact(event, KeyEvent.KEYCODE_E);
+    }
+
+    /**
+     * D4 full-refresh nudge combo: R with CTRL and SHIFT held. Recognized
+     * in every state; receipt-only effect (see EinkMode.nudge).
+     */
+    static boolean isRefreshCombo(KeyEvent event) {
+        return isCtrlShiftExact(event, KeyEvent.KEYCODE_R);
+    }
+
+    /**
+     * Exact CTRL+SHIFT modifier test shared by all module combos. The
+     * lock-state mask caveat from the D2 review is a known dropped
+     * advisory — deliberately NOT re-fixed here, so all three combos keep
+     * byte-identical recognition semantics.
+     */
+    private static boolean isCtrlShiftExact(KeyEvent event, int keyCode) {
         if (event.getAction() != KeyEvent.ACTION_DOWN
-                || event.getKeyCode() != KeyEvent.KEYCODE_H) {
+                || event.getKeyCode() != keyCode) {
             return false;
         }
         int meta = event.getMetaState();

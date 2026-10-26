@@ -26,6 +26,17 @@ import java.util.Locale;
  *    beyond a redaction marker; character-capable keys outside editors
  *    appear only in routing-decision lines (route:/pair:). Only navigation
  *    cluster keys keep their keycode in the key-observation line.
+ *
+ * D4 additions:
+ *  - eventEink(): gated on EinkMode.isOn() (NOT the routing kill-switch —
+ *    eink is an independent quality toggle). Used for eink-on-only
+ *    receipts (per-sweep animator lines).
+ *  - eventAlways() additionally carries the eink toggle/nudge lines: same
+ *    class as kill-switch toggles — rare, user-initiated single lines
+ *    that must be visible as combo receipts regardless of gate states.
+ *    No keycodes are logged by any D4 line (combo letters in toggle
+ *    lines follow the D2 "CTRL+SHIFT+H" precedent — a combo name, not
+ *    typed content).
  */
 public final class DriftReport {
 
@@ -47,9 +58,23 @@ public final class DriftReport {
 
     /**
      * Un-gated companion for the init line and kill-switch toggle lines —
-     * the only output permitted while routing is disabled.
+     * the only output permitted while routing is disabled. D4: also the
+     * eink toggle/nudge lines (see class comment).
      */
     public static void eventAlways(String line) {
+        append(line);
+        Log.d(Hardkey.LOG_TAG, line);
+    }
+
+    /**
+     * Eink-gated companion (D4): written only while eink mode is ON —
+     * independently of the routing kill-switch. Used for per-sweep
+     * receipts that are meaningless with eink off.
+     */
+    public static void eventEink(String line) {
+        if (!EinkMode.isOn()) {
+            return;
+        }
         append(line);
         Log.d(Hardkey.LOG_TAG, line);
     }
@@ -182,6 +207,13 @@ public final class DriftReport {
     /** Ring-overlay position receipt (decor-content coordinates). */
     public static void ringAt(int left, int top, int right, int bottom) {
         event("ring: [" + left + "," + top + " " + right + "," + bottom + "]");
+    }
+
+    // ── D4 receipts: eink sweeps. No keycodes (D2 privacy rules). ─────────
+
+    /** Animator-sweep receipt: one line per sweep, honest count. */
+    public static void animatorsCleared(int count) {
+        eventEink("eink: animators cleared on " + count + " lists");
     }
 
     private static String ts() {

@@ -22,11 +22,13 @@ public class HardkeyInstaller implements Application.ActivityLifecycleCallbacks 
 
     @Override
     public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
+        EinkMode.clearAnimators(activity); // D4: screen-bind animator sweep
         wrap(activity, false);
     }
 
     @Override
     public void onActivityResumed(Activity activity) {
+        EinkMode.clearAnimators(activity); // D4: resume animator sweep
         wrap(activity, true);
     }
 
