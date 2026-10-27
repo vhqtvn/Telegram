@@ -10,6 +10,40 @@
             android:authorities="${applicationId}.hardkeyinit"
             android:exported="false"
             android:initOrder="2147483646" />
+
+        <!-- D5 Quick Settings tiles: phone users toggle the module without
+             keyboard combos. Each service routes through the EXISTING
+             toggle paths (Hardkey.toggle() / EinkMode.toggle()); state and
+             labels are re-derived from actual module state on every bind.
+             FQCNs on purpose (module precedent, HardkeyInit above): a
+             leading-dot name would resolve against the CONSUMING app's
+             package at link time. Deliberately NO ACTIVE_TILE meta-data:
+             with it the service is bound continuously from add-time and
+             this SystemUI never re-fires onStartListening, so a combo
+             toggle would leave a stale tile until the next click
+             (observed on the hardkey-d01-avd probe, d5-probe-listen).
+             Without it the system binds only while the shade shows the
+             tile, re-syncing state on every shade open. -->
+        <service
+            android:name="org.telegram.hardkey.HardkeyRoutingTileService"
+            android:label="Hardkey keys"
+            android:icon="@drawable/ic_hardkey_routing"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
+        <service
+            android:name="org.telegram.hardkey.EinkModeTileService"
+            android:label="Hardkey e-ink"
+            android:icon="@drawable/ic_hardkey_eink"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
