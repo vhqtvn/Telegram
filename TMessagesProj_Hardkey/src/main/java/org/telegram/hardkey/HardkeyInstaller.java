@@ -23,16 +23,18 @@ import java.lang.ref.WeakReference;
 public class HardkeyInstaller implements Application.ActivityLifecycleCallbacks {
 
     /**
-     * D5: last resumed activity, weakly — the QS tile services have no
-     * activity of their own, and EinkMode's enable path wants the LIVE
-     * screen for its animator sweep exactly like the combo path gets it
-     * from dispatchKeyEvent. Null when nothing is resumed (app in
-     * background: the sweep becomes the documented no-op, see
-     * EinkMode.clearAnimators).
+     * D5→D6: last resumed activity, weakly — no code path in this module
+     * owns an activity at toggle time except the one the user is looking
+     * at. HardkeySettingsActivity (D6) hands it to EinkMode.toggle for the
+     * enable-time animator sweep on the LIVE screen, exactly like the
+     * combo path gets it from dispatchKeyEvent (the D5 QS tiles that used
+     * this are removed by operator decision). Null when nothing is
+     * resumed (app in background: the sweep becomes the documented no-op,
+     * see EinkMode.clearAnimators).
      */
     private static volatile WeakReference<Activity> lastResumed;
 
-    /** D5: the currently/most-recently resumed activity, or null. */
+    /** D5→D6: the currently/most-recently resumed activity, or null. */
     static Activity currentActivity() {
         WeakReference<Activity> ref = lastResumed;
         return ref != null ? ref.get() : null;
@@ -46,7 +48,8 @@ public class HardkeyInstaller implements Application.ActivityLifecycleCallbacks 
 
     @Override
     public void onActivityResumed(Activity activity) {
-        lastResumed = new WeakReference<>(activity); // D5 (see field comment)
+        Autodetect.onFirstResume(activity); // D6: first-run policy (own once-guards, crash-safe)
+        lastResumed = new WeakReference<>(activity); // D5→D6 (see field comment)
         EinkMode.clearAnimators(activity); // D4: resume animator sweep
         wrap(activity, true);
     }

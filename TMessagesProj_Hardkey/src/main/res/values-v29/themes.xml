@@ -1,0 +1,11 @@
+<resources>
+    <!-- Device-default DayNight variant (API 29+): follows the system
+         dark setting on LCD devices, stays light on e-ink panels. The
+         platform has no DayNight.NoActionBar alias, so the bar is
+         disabled explicitly (the only "styling" beyond the parent).
+         See values/themes.xml for the NoActionBar rationale. -->
+    <style name="HardkeySettingsTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

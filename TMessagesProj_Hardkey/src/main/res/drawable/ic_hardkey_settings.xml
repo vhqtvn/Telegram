@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome keyboard glyph (alpha-only rendering): used as the static
+     shortcut icon and the notification small icon. Simple solid keys, no
+     even-odd path tricks — e-ink friendly, legible at 24dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,6 h20 a1.5,1.5 0 0 1 1.5,1.5 v9 a1.5,1.5 0 0 1 -1.5,1.5 h-20 a1.5,1.5 0 0 1 -1.5,-1.5 v-9 a1.5,1.5 0 0 1 1.5,-1.5 z M4.5,9 h2 v2 h-2 z M8.5,9 h2 v2 h-2 z M12.5,9 h2 v2 h-2 z M16.5,9 h2 v2 h-2 z M6,12.5 h2 v2 h-2 z M10,12.5 h4 v2 h-4 z M16,12.5 h2 v2 h-2 z"/>
+</vector>
