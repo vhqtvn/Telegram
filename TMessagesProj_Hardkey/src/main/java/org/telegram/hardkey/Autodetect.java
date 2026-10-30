@@ -8,6 +8,9 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Build;
 import android.view.Display;
@@ -23,13 +26,14 @@ import java.util.Locale;
  *
  * Structure (mission requirement): detection is expressed as PURE STATIC
  * methods taking (manufacturer, brand, model, keyboard, hardKeyboardHidden,
- * refreshRate) so every branch is unit-inspectable without a device; the
- * live run gathers the real values, applies policy through the EXISTING
- * toggle paths only (Hardkey.toggle() / EinkMode.toggle() — no duplicated
- * state logic anywhere), and receipts both the raw environment and the
- * policy outcome through DriftReport.eventAlways (single init-class lines:
- * visible regardless of the routing gate, no keycodes/user content — D2
- * privacy rules).
+ * refreshRate, einkThemePackage) so every branch is unit-inspectable
+ * without a device; the live run gathers the real values (including the
+ * EINK_THEME_PACKAGE system-package probe), applies policy through the
+ * EXISTING toggle paths only (Hardkey.toggle() / EinkMode.toggle() — no
+ * duplicated state logic anywhere), and receipts both the raw
+ * environment and the policy outcome through DriftReport.eventAlways
+ * (single init-class lines: visible regardless of the routing gate, no
+ * keycodes/user content — D2 privacy rules).
  *
  * ONCE-PER-INSTALL ordering: the applied flag is persisted DURABLY BEFORE
  * any state change (synchronous commit() with the return value verified —
@@ -58,11 +62,35 @@ final class Autodetect {
      * against Build.MANUFACTURER / BRAND / MODEL. "palm" from the mission
      * sketch was deliberately NOT included: the 2018 Palm Phone (TCL) is
      * an LCD device, so the substring would false-positive; the policy
-     * stays conservative (known e-reader vendors only).
+     * stays conservative (known e-reader vendors only). D7: the Minimal
+     * Phone MP01 (e-ink, hardware QWERTY) is covered by its short
+     * brand/model keys only — no fingerprints or other device-identifying
+     * strings in code (operator privacy constraint).
      */
     static final String[] EINK_VENDORS = {
             "onyx", "boox", "hisense", "bigme", "ireader", "hanvon", "meebook",
+            "minimal_phone", "mp01",
     };
+
+    /**
+     * E-ink manufacturer matched by EQUALS on the trimmed, lowercased
+     * Build.MANUFACTURER only (see matchEinkVendor): the MP01's
+     * manufacturer is a common English word, so substring-matching it
+     * against any identity field would false-positive.
+     */
+    static final String EINK_MANUFACTURER_EXACT = "along";
+
+    /**
+     * E-ink ROM theme package (D7 generic signal): observed as a SYSTEM
+     * package on e-ink-ROM devices, absent on ordinary LCD phones. Its
+     * presence AS A SYSTEM PACKAGE (FLAG_SYSTEM — a user-sideloaded app
+     * squatting the name does not count) is ROM-level evidence, i.e. at
+     * least as strong as a vendor-name substring, so it fires ALONE
+     * (vendor hits do too; only the weak refresh-rate signal requires a
+     * keyboard). Probing requires the module manifest's &lt;queries&gt;
+     * declaration (API 30+ package visibility).
+     */
+    static final String EINK_THEME_PACKAGE = "com.android.einktheme";
 
     /**
      * Display refresh rate at/below which the panel is plausibly e-ink.
@@ -126,18 +154,54 @@ final class Autodetect {
                 }
             }
         }
+        // EQUALS-only tail for the manufacturer token: the word is too
+        // common for a substring match (e.g. "prelong ..."), while an
+        // exact manufacturer field hit is as specific as a vendor token.
+        if (manufacturer != null
+                && EINK_MANUFACTURER_EXACT.equals(manufacturer.trim().toLowerCase(Locale.US))) {
+            return EINK_MANUFACTURER_EXACT;
+        }
         return null;
     }
 
     /**
+     * Live probe for the e-ink ROM theme package (EINK_THEME_PACKAGE):
+     * true only when present AS A SYSTEM PACKAGE. NameNotFoundException
+     * (absent — or filtered by package visibility, so the manifest
+     * &lt;queries&gt; block is load-bearing) and any failure are a plain
+     * false; the int-flags getPackageInfo overload is deprecated on 33+
+     * but functional (same stance as Display.getRefreshRate above).
+     */
+    static boolean hasEinkThemePackage(Context context) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            if (pm == null) {
+                return false;
+            }
+            PackageInfo info = pm.getPackageInfo(EINK_THEME_PACKAGE, 0);
+            return info.applicationInfo != null
+                    && (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
      * E-ink detection, conservative: a known e-reader vendor substring
-     * ANYWHERE in manufacturer/brand/model, OR (unusually low refresh
-     * rate AND a hardware keyboard present). refreshRateHz <= 0 (unknown)
-     * never corroborates.
+     * ANYWHERE in manufacturer/brand/model (plus the EQUALS-only
+     * manufacturer rule), OR the e-ink ROM theme package installed as a
+     * system package (ROM-level evidence — sufficient alone, like a
+     * vendor hit), OR (unusually low refresh rate AND a hardware
+     * keyboard present). refreshRateHz <= 0 (unknown) never corroborates.
      */
     static boolean detectEink(String manufacturer, String brand, String model,
-            float refreshRateHz, boolean hardwareKeyboard) {
+            float refreshRateHz, boolean hardwareKeyboard, boolean einkThemePackage) {
         if (matchEinkVendor(manufacturer, brand, model) != null) {
+            return true;
+        }
+        if (einkThemePackage) {
             return true;
         }
         return refreshRateHz > 0f && refreshRateHz <= LOW_REFRESH_HZ && hardwareKeyboard;
@@ -164,19 +228,21 @@ final class Autodetect {
     /**
      * The detected-environment line — the live-values probe shown both in
      * DriftReport and on the settings screen's diagnostics view. Pure:
-     * all inputs are parameters.
+     * all inputs are parameters. einktheme is reported so an on-device
+     * run proves WHICH signal fired the e-ink branch.
      */
     static String describe(String manufacturer, String brand, String model,
-            int keyboard, int hardKeyboardHidden, float refreshRateHz) {
+            int keyboard, int hardKeyboardHidden, float refreshRateHz, boolean einkThemePackage) {
         boolean kb = hasHardwareKeyboard(keyboard, hardKeyboardHidden);
         String vendor = matchEinkVendor(manufacturer, brand, model);
-        boolean eink = detectEink(manufacturer, brand, model, refreshRateHz, kb);
+        boolean eink = detectEink(manufacturer, brand, model, refreshRateHz, kb, einkThemePackage);
         return "autodetect env: manufacturer=" + nullSafe(manufacturer)
                 + " brand=" + nullSafe(brand)
                 + " model=" + nullSafe(model)
                 + " keyboard=" + keyboardName(keyboard)
                 + " hardKeyboardHidden=" + hiddenName(hardKeyboardHidden)
                 + " refresh=" + String.format(Locale.US, "%.1f", refreshRateHz) + "Hz"
+                + " einktheme=" + (einkThemePackage ? "yes" : "no")
                 + " -> keyboard=" + (kb ? "yes" : "no")
                 + " eink=" + (eink ? "yes" : "no")
                 + " (vendor=" + (vendor != null ? vendor : "none") + ")";
@@ -207,7 +273,8 @@ final class Autodetect {
     static String environmentDescription(Context context) {
         Configuration cfg = context.getResources().getConfiguration();
         return describe(Build.MANUFACTURER, Build.BRAND, Build.MODEL,
-                cfg.keyboard, cfg.hardKeyboardHidden, liveRefreshRate(context));
+                cfg.keyboard, cfg.hardKeyboardHidden, liveRefreshRate(context),
+                hasEinkThemePackage(context));
     }
 
     private static String nullSafe(String s) {
@@ -243,11 +310,12 @@ final class Autodetect {
         Configuration cfg = app.getResources().getConfiguration();
         float refreshRate = liveRefreshRate(app);
         boolean keyboard = hasHardwareKeyboard(cfg.keyboard, cfg.hardKeyboardHidden);
+        boolean einkTheme = hasEinkThemePackage(app);
         String vendor = matchEinkVendor(Build.MANUFACTURER, Build.BRAND, Build.MODEL);
         boolean eink = detectEink(Build.MANUFACTURER, Build.BRAND, Build.MODEL,
-                refreshRate, keyboard);
+                refreshRate, keyboard, einkTheme);
         DriftReport.eventAlways(describe(Build.MANUFACTURER, Build.BRAND, Build.MODEL,
-                cfg.keyboard, cfg.hardKeyboardHidden, refreshRate));
+                cfg.keyboard, cfg.hardKeyboardHidden, refreshRate, einkTheme));
 
         final SharedPreferences prefs =
                 app.getSharedPreferences(Hardkey.PREFS_NAME, Context.MODE_PRIVATE);
@@ -305,7 +373,8 @@ final class Autodetect {
 
         DriftReport.eventAlways("autodetect: keyboard=" + (keyboard ? "yes" : "no")
                 + " eink=" + (eink ? "yes" : "no")
-                + " (vendor=" + (vendor != null ? vendor : "none") + ")"
+                + " (vendor=" + (vendor != null ? vendor : "none")
+                + " einktheme=" + (einkTheme ? "yes" : "no") + ")"
                 + " applied routing=" + routingResult
                 + " eink=" + einkResult);
 

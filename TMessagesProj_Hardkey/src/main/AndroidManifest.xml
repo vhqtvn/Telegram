@@ -1,5 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- D7: package-visibility declaration (API 30+). Without it,
+         PackageManager queries for the e-ink ROM theme package return
+         NameNotFoundException REGARDLESS of installation state, which
+         would silently kill Autodetect's generic e-ink signal on every
+         device that could fire it. -->
+    <queries>
+        <package android:name="com.android.einktheme"/>
+    </queries>
+
     <application>
         <!-- Auto-init: the platform instantiates this provider before
              Application.onCreate(); we use that slot to install the
