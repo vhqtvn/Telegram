@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- D7: package-visibility declaration (API 30+). Without it,
+         PackageManager queries for the e-ink ROM theme package return
+         NameNotFoundException REGARDLESS of installation state, which
+         would silently kill Autodetect's generic e-ink signal on every
+         device that could fire it. -->
+    <queries>
+        <package android:name="com.android.einktheme"/>
+    </queries>
+
+    <application>
+        <!-- Auto-init: the platform instantiates this provider before
+             Application.onCreate(); we use that slot to install the
+             activity-lifecycle hook. High initOrder = initialized last
+             among the process's providers. -->
+        <provider
+            android:name="org.telegram.hardkey.HardkeyInit"
+            android:authorities="${applicationId}.hardkeyinit"
+            android:exported="false"
+            android:initOrder="2147483646" />
+
+        <!-- D6 module-owned settings screen (replaces the D5 Quick Settings
+             tiles, removed by operator decision: tiles were judged bad UX
+             for app-mode control). NOT exported, no intent-filters: the
+             only launchers are (a) the "Hardkey" row this fork adds to
+             Telegram's own Settings screen (Rung-2 patch in
+             org.telegram.ui.SettingsActivity — explicit setClassName
+             intent, same app) and (b) this module's own PendingIntents
+             (the autodetect heads-up notification contentIntent — explicit
+             intent, same app). The earlier D6 shortcut mechanism (static
+             launcher shortcut + MAIN/LAUNCHER + custom-action filter +
+             res/xml/hardkey_shortcuts.xml) was REMOVED by operator
+             decision (option B): exactly ONE launcher icon. FQCN on
+             purpose (module precedent, HardkeyInit above). -->
+        <activity
+            android:name="org.telegram.hardkey.HardkeySettingsActivity"
+            android:label="@string/hardkey_settings_title"
+            android:icon="@drawable/ic_hardkey_settings"
+            android:theme="@style/HardkeySettingsTheme"
+            android:exported="false"/>
+    </application>
+
+</manifest>

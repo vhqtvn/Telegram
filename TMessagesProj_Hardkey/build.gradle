@@ -1,0 +1,44 @@
+apply plugin: 'com.android.library'
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+android {
+    namespace 'org.telegram.hardkey'
+    compileSdkVersion 36
+
+    defaultConfig {
+        minSdkVersion 23
+        targetSdkVersion 36
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lintOptions {
+        disable 'MissingTranslation'
+        disable 'ExtraTranslation'
+    }
+}
+
+dependencies {
+    // D3: the real TMessagesProj classes (RecyclerListView.clickItem for the
+    // activation path, vendored androidx RecyclerView/LinearLayoutManager at
+    // the exact FQCNs the app ships). Compile-time resolution comes from the
+    // same project the app already packages — no runtime duplication, no
+    // maven/vendored duplicate-class hazard (the app excludes the maven
+    // recyclerview artifact globally). Direct compiled references also
+    // survive R8 consistently (no reflection).
+    implementation project(':TMessagesProj')
+
+    // Compile-time only: the vendored RecyclerView's supertypes reference
+    // androidx.core (ScrollingView, NestedScrollingChild2, ...). TMessagesProj
+    // declares this as `implementation` (not consumer-visible), so resolve it
+    // here at the SAME version; at runtime the app ships the real artifact.
+    compileOnly 'androidx.core:core:1.16.0'
+}

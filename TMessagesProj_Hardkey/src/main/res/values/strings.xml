@@ -1,0 +1,17 @@
+<resources>
+    <!-- D6: all user-visible labels live in resources, not hardcoded
+         constants (D5 review nit). Default locale only; the module's
+         lintOptions disable MissingTranslation/ExtraTranslation. -->
+    <string name="hardkey_settings_title">Hardkey settings</string>
+    <string name="hardkey_settings_routing">Keyboard routing</string>
+    <string name="hardkey_settings_eink">E-ink mode</string>
+    <string name="hardkey_settings_nudge">Refresh screen now</string>
+    <string name="hardkey_settings_diagnostics">Diagnostics</string>
+    <string name="hardkey_settings_keymap_title">Key map</string>
+    <string name="hardkey_settings_keymap">Navigation\n• Arrows — move selection\n• Enter / center — open selected\n• Space / Page Down — page down\n• Page Up or Shift+Space — page up\n• Esc — back\n• N / P — next / previous chat\n\nCombos (Ctrl+Shift+…)\n• …H — toggle keyboard routing\n• …E — toggle e-ink mode\n• …R — refresh screen</string>
+    <string name="hardkey_shortcut_short">Hardkey settings</string>
+    <string name="hardkey_shortcut_long">Hardkey settings</string>
+    <string name="hardkey_notify_channel">Hardkey</string>
+    <string name="hardkey_notify_title">Hardkey configured</string>
+    <string name="hardkey_notify_text">Keyboard/e-ink device detected — settings applied. Tap to review.</string>
+</resources>

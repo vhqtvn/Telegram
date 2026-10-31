@@ -778,6 +778,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(SettingCell.Factory.of(22, 0xFFF45255, 0xFFDF3955, 0, getString(R.string.DebugClearLogs)));
         }
 
+        // [hardkey] Hardkey settings row (fork module TMessagesProj_Hardkey; text-only like the debug rows)
+        items.add(SettingCell.Factory.of(27, 0xFF55CA47, 0xFF27B434, 0, "Hardkey")); // [hardkey]
         items.add(UItem.asCustomShadow(versionView));
     }
 
@@ -917,6 +919,13 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
             case 26: {
                 presentFragment(new AudioRecorderSettingsActivity());
+                break;
+            }
+            case 27: { // [hardkey] string launch — no compile dependency on the module (Rung-2 patch)
+                try { // [hardkey] the try/catch IS the guard: module absent → silent no-op
+                    getContext().startActivity(new Intent().setClassName(getContext().getPackageName(), "org.telegram.hardkey.HardkeySettingsActivity")); // [hardkey]
+                } catch (android.content.ActivityNotFoundException e) { // [hardkey]
+                } // [hardkey]
                 break;
             }
         }

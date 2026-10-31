@@ -1,0 +1,12 @@
+<resources>
+    <!-- Plain device-default theme, e-ink friendly: no custom styling
+         beyond the alias itself. NoActionBar: targetSdk 36 enforces
+         edge-to-edge, under which the opaque DeviceDefault ActionBar
+         OVERLAYS the content (observed: content FrameLayout 0,0-480,854
+         behind ActionBarContainer 0,0-480,220 — the top rows were
+         covered and untappable); the screen therefore carries its own
+         plain in-content title row and fitsSystemWindows on the root.
+         Base (API < 29) fallback: plain DeviceDefault (light on e-ink). -->
+    <style name="HardkeySettingsTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+    </style>
+</resources>
